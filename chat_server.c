@@ -271,23 +271,10 @@ void remove_client(int socket_fd) {
 	close(socket_fd);
 }
 
-void handle_file_transfer(User* sender, FileHeader* header, int room_id) {
-	// 파일 수신 시작 알림 브로드캐스트
-	char notification[512];
-	snprintf(notification, sizeof(notification), 
-			"User %s is sending file: %s (%zu bytes)",
-			sender->username, header->filename, header->size);
-	broadcast_message(sender->socket_fd, notification, room_id);
-
-	// 파일 데이터 수신 및 브로드캐스트
-	char buffer[8192];
-	size_t remaining = header->size;
-	while (remaining > 0) {
-		size_t to_read = remaining < sizeof(buffer) ? remaining : sizeof(buffer);
-		ssize_t received = recv(sender->socket_fd, buffer, to_read, 0);
-		if (received <= 0) break;
-
-		broadcast_message(sender->socket_fd, buffer, room_id);
-		remaining -= received;
-	}
+void handle_file_transfer(User *sender, FileHeader *header, int room_id) {
+    char notification[512];
+    snprintf(notification, sizeof(notification), 
+             "User %s 업로드 완료: %s (%zu bytes)",
+             sender->username, header->filename, header->size);
+    broadcast_message(sender->socket_fd, notification, room_id);
 }

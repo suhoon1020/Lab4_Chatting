@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <curl/curl.h>
 
 // 메시지 타입 정의
 #define MSG_TYPE_CHAT 1
@@ -14,11 +15,12 @@
 #define MSG_TYPE_FILE_END 4
 
 // 파일 전송을 위한 헤더 구조체
-typedef struct {
-	int type;           // 메시지 타입
+typedef struct
+{
+	int type;			// 메시지 타입
 	char filename[256]; // 파일 이름
-	size_t size;       // 파일 크기
-	char sender[50];   // 보내는 사람
+	size_t size;		// 파일 크기
+	char sender[50];	// 보내는 사람
 } FileHeader;
 
 // 전역 변수
@@ -33,16 +35,17 @@ pthread_t receive_thread;
 GtkBuilder *builder;
 
 // 함수 선언
-void* receive_message(void* arg);
+void *receive_message(void *arg);
 void on_send_clicked(GtkButton *button, gpointer user_data);
 void on_login_clicked(GtkButton *button, gpointer user_data);
-void append_message(const char* message);
-void show_error_message(const char* message);
+void append_message(const char *message);
+void show_error_message(const char *message);
 void send_file(const char *filepath);
 void on_file_button_clicked(GtkButton *button, gpointer user_data);
-void handle_received_file(FileHeader* header, const char* data);
+void handle_received_file(FileHeader *header, const char *data);
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 	gtk_init(&argc, &argv);
 
 	// Glade 파일 로드
@@ -50,7 +53,8 @@ int main(int argc, char *argv[]) {
 	GError *error = NULL;
 
 	// 현재 디렉토리에서 glade 파일 로드 시도
-	if (gtk_builder_add_from_file(builder, "chat_ui.xml", &error) == 0) {
+	if (gtk_builder_add_from_file(builder, "chat_ui.xml", &error) == 0)
+	{
 		g_printerr("Error loading file: %s\n", error->message);
 		g_clear_error(&error);
 		show_error_message("Could not load UI file (chat.glade). Please check if the file exists.");
@@ -59,39 +63,45 @@ int main(int argc, char *argv[]) {
 
 	// 위젯 가져오기
 	login_window = GTK_WIDGET(gtk_builder_get_object(builder, "login_window"));
-	if (login_window == NULL) {
+	if (login_window == NULL)
+	{
 		show_error_message("Could not find login_window");
 		return 1;
 	}
 
 	chat_window = GTK_WIDGET(gtk_builder_get_object(builder, "chat_window"));
-	if (chat_window == NULL) {
+	if (chat_window == NULL)
+	{
 		show_error_message("Could not find chat_window");
 		return 1;
 	}
 
 	chat_view = GTK_WIDGET(gtk_builder_get_object(builder, "chat_view"));
-	if (chat_view == NULL) {
+	if (chat_view == NULL)
+	{
 		show_error_message("Could not find chat_view");
 		return 1;
 	}
 
 	message_entry = GTK_WIDGET(gtk_builder_get_object(builder, "message_entry"));
-	if (message_entry == NULL) {
+	if (message_entry == NULL)
+	{
 		show_error_message("Could not find message_entry");
 		return 1;
 	}
 
 	// 버튼 시그널 연결
 	GtkWidget *login_button = GTK_WIDGET(gtk_builder_get_object(builder, "login_button"));
-	if (login_button == NULL) {
+	if (login_button == NULL)
+	{
 		show_error_message("Could not find login_button");
 		return 1;
 	}
 	g_signal_connect(login_button, "clicked", G_CALLBACK(on_login_clicked), NULL);
 
 	GtkWidget *send_button = GTK_WIDGET(gtk_builder_get_object(builder, "send_button"));
-	if (send_button == NULL) {
+	if (send_button == NULL)
+	{
 		show_error_message("Could not find send_button");
 		return 1;
 	}
@@ -99,13 +109,12 @@ int main(int argc, char *argv[]) {
 
 	// 파일 버튼 시그널 연결 추가
 	GtkWidget *file_button = GTK_WIDGET(gtk_builder_get_object(builder, "file_button"));
-	if (file_button == NULL) {
-		        show_error_message("Could not find file_button");
-				        return 1;
+	if (file_button == NULL)
+	{
+		show_error_message("Could not find file_button");
+		return 1;
 	}
 	g_signal_connect(file_button, "clicked", G_CALLBACK(on_file_button_clicked), NULL);
-
-
 
 	// 채팅 버퍼 초기화
 	chat_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(chat_view));
@@ -122,22 +131,25 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-void show_error_message(const char* message) {
+void show_error_message(const char *message)
+{
 	GtkWidget *dialog = gtk_message_dialog_new(NULL,
-			GTK_DIALOG_MODAL,
-			GTK_MESSAGE_ERROR,
-			GTK_BUTTONS_OK,
-			"%s", message);
+											   GTK_DIALOG_MODAL,
+											   GTK_MESSAGE_ERROR,
+											   GTK_BUTTONS_OK,
+											   "%s", message);
 	gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy(dialog);
 }
 
-void on_login_clicked(GtkButton *button, gpointer user_data) {
+void on_login_clicked(GtkButton *button, gpointer user_data)
+{
 	GtkEntry *username_entry = GTK_ENTRY(gtk_builder_get_object(builder, "username_entry"));
 	GtkEntry *server_entry = GTK_ENTRY(gtk_builder_get_object(builder, "server_entry"));
 	GtkEntry *port_entry = GTK_ENTRY(gtk_builder_get_object(builder, "port_entry"));
 
-	if (!username_entry || !server_entry || !port_entry) {
+	if (!username_entry || !server_entry || !port_entry)
+	{
 		show_error_message("Could not find input fields");
 		return;
 	}
@@ -146,7 +158,8 @@ void on_login_clicked(GtkButton *button, gpointer user_data) {
 	const char *port_str = gtk_entry_get_text(port_entry);
 	const char *username_str = gtk_entry_get_text(username_entry);
 
-	if (strlen(username_str) == 0) {
+	if (strlen(username_str) == 0)
+	{
 		show_error_message("Please enter a username");
 		return;
 	}
@@ -158,7 +171,8 @@ void on_login_clicked(GtkButton *button, gpointer user_data) {
 	server_addr.sin_addr.s_addr = inet_addr(server_ip);
 	server_addr.sin_port = htons(atoi(port_str));
 
-	if (connect(sock_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+	if (connect(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+	{
 		show_error_message("Connection failed! Check server address and port.");
 		return;
 	}
@@ -174,11 +188,13 @@ void on_login_clicked(GtkButton *button, gpointer user_data) {
 	gtk_widget_hide(login_window);
 	gtk_widget_show_all(chat_window);
 }
-void on_send_clicked(GtkButton *button, gpointer user_data) {
+void on_send_clicked(GtkButton *button, gpointer user_data)
+{
 	const char *message = gtk_entry_get_text(GTK_ENTRY(message_entry));
-	if (strlen(message) > 0) {
+	if (strlen(message) > 0)
+	{
 		// 메시지 포맷팅을 위한 버퍼
-		char formatted_message[1100];  // username(50) + message(1024) + 추가 문자
+		char formatted_message[1100]; // username(50) + message(1024) + 추가 문자
 		snprintf(formatted_message, sizeof(formatted_message), "%s: %s", username, message);
 
 		// 서버로 전송
@@ -191,18 +207,21 @@ void on_send_clicked(GtkButton *button, gpointer user_data) {
 		gtk_entry_set_text(GTK_ENTRY(message_entry), "");
 	}
 }
-void append_message(const char* message) {
+void append_message(const char *message)
+{
 	GtkTextIter iter;
 	gtk_text_buffer_get_end_iter(chat_buffer, &iter);
 	gtk_text_buffer_insert(chat_buffer, &iter, message, -1);
 	gtk_text_buffer_insert(chat_buffer, &iter, "\n", -1);
 }
 
-void* receive_message(void* arg) {
+void *receive_message(void *arg)
+{
 	char buffer[1024];
 	int read_size;
 
-	while ((read_size = recv(sock_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+	while ((read_size = recv(sock_fd, buffer, sizeof(buffer) - 1, 0)) > 0)
+	{
 		buffer[read_size] = '\0';
 		gdk_threads_add_idle((GSourceFunc)append_message, g_strdup(buffer));
 	}
@@ -211,59 +230,67 @@ void* receive_message(void* arg) {
 }
 
 void send_file(const char *filepath) {
-	FILE *file = fopen(filepath, "rb");
-	if (!file) {
-		show_error_message("Could not open file");
-		return;
-	}
+    CURL *curl;
+    CURLcode res;
 
-	// 파일 크기 얻기
-	fseek(file, 0, SEEK_END);
-	size_t file_size = ftell(file);
-	fseek(file, 0, SEEK_SET);
+    FILE *file = fopen(filepath, "rb");
+    if (!file) {
+        show_error_message("파일을 열 수 없습니다.");
+        return;
+    }
 
-	// 파일 이름 추출
-	char *filename = strrchr(filepath, '/');
-	filename = filename ? filename + 1 : (char*)filepath;
+    // 파일 이름 추출
+    char *filename = strrchr(filepath, '/');
+    filename = filename ? filename + 1 : (char *)filepath;
 
-	// 파일 헤더 전송
-	FileHeader header;
-	header.type = MSG_TYPE_FILE_START;
-	header.size = file_size;
-	strncpy(header.filename, filename, 255);
-	strncpy(header.sender, username, 49);
+    // FTP 서버 URL 생성
+    char ftp_url[512];
+    snprintf(ftp_url, sizeof(ftp_url), "ftp://127.0.0.1/uploads/%s", filename);
 
-	send(sock_fd, &header, sizeof(FileHeader), 0);
+    // libcurl 초기화
+    curl = curl_easy_init();
+    if (!curl) {
+        fclose(file);
+        show_error_message("libcurl 초기화 실패");
+        return;
+    }
 
-	// 파일 데이터 전송
-	char buffer[8192];
-	size_t bytes_read;
-	while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-		send(sock_fd, buffer, bytes_read, 0);
-	}
+    // FTP 업로드 설정
+    curl_easy_setopt(curl, CURLOPT_URL, ftp_url);
+    curl_easy_setopt(curl, CURLOPT_USERNAME, "linux");
+    curl_easy_setopt(curl, CURLOPT_PASSWORD, "1234");
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    curl_easy_setopt(curl, CURLOPT_READDATA, file);
 
-	// 전송 완료 메시지
-	header.type = MSG_TYPE_FILE_END;
-	send(sock_fd, &header, sizeof(FileHeader), 0);
+    // 파일 업로드 실행
+    res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "FTP 업로드 실패: %s", curl_easy_strerror(res));
+        show_error_message(error_msg);
+    } else {
+        char success_msg[256];
+        snprintf(success_msg, sizeof(success_msg), "파일 '%s' 업로드 완료", filename);
+        append_message(success_msg);
+    }
 
-	fclose(file);
-
-	// 채팅창에 알림 메시지 추가
-	char msg[512];
-	snprintf(msg, sizeof(msg), "File '%s' sent successfully", filename);
-	append_message(msg);
+    // 정리
+    fclose(file);
+    curl_easy_cleanup(curl);
 }
 
 // 파일 선택 버튼 핸들러
-void on_file_button_clicked(GtkButton *button, gpointer user_data) {
+void on_file_button_clicked(GtkButton *button, gpointer user_data)
+{
 	GtkWidget *dialog = gtk_file_chooser_dialog_new("Choose a file",
-			GTK_WINDOW(chat_window),
-			GTK_FILE_CHOOSER_ACTION_OPEN,
-			"_Cancel", GTK_RESPONSE_CANCEL,
-			"_Open", GTK_RESPONSE_ACCEPT,
-			NULL);
+													GTK_WINDOW(chat_window),
+													GTK_FILE_CHOOSER_ACTION_OPEN,
+													"_Cancel", GTK_RESPONSE_CANCEL,
+													"_Open", GTK_RESPONSE_ACCEPT,
+													NULL);
 
-	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+	{
 		char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 		send_file(filename);
 		g_free(filename);
@@ -272,15 +299,18 @@ void on_file_button_clicked(GtkButton *button, gpointer user_data) {
 	gtk_widget_destroy(dialog);
 }
 
-void handle_received_file(FileHeader* header, const char* data) {
+void handle_received_file(FileHeader *header, const char *data)
+{
 	char filepath[512];
 	snprintf(filepath, sizeof(filepath), "downloads/%s", header->filename);
 
-	FILE* file = fopen(filepath, "wb");
-	if (!file) {
-		mkdir("downloads", 0755);  // downloads 디렉토리 생성
+	FILE *file = fopen(filepath, "wb");
+	if (!file)
+	{
+		mkdir("downloads", 0755); // downloads 디렉토리 생성
 		file = fopen(filepath, "wb");
-		if (!file) {
+		if (!file)
+		{
 			show_error_message("Could not create file");
 			return;
 		}
@@ -290,7 +320,7 @@ void handle_received_file(FileHeader* header, const char* data) {
 	fclose(file);
 
 	char msg[512];
-	snprintf(msg, sizeof(msg), "Received file from %s: %s", 
-			header->sender, header->filename);
+	snprintf(msg, sizeof(msg), "Received file from %s: %s",
+			 header->sender, header->filename);
 	append_message(msg);
 }
